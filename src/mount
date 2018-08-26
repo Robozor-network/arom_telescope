@@ -119,8 +119,10 @@ class mount(AromNode):
 
         rospy.Subscriber("/mount/controll", String, callback_btn)
         rospy.Subscriber("/mount/set/offset2", String, self.set_offset)
+        rospy.Subscriber("/mount/tracking_status", arom_telescope.msg.time_machine, self.get_tracking)
         rospy.Subscriber("/arom/UI/buttons", String, callback_btn)
         rospy.Subscriber("/ui/Keyboard/out", String, callback_btn)
+        #self.pub_tracking_status = rospy.Publisher('/mount/tracking_status',  arom_telescope.msg.time_machine, queue_size=5, latch=True)
         self.pub_status = rospy.Publisher('/mount/status', String, queue_size=10)
         self.pub_radec  = rospy.Publisher('/mount/status/coordinates/RaDec', Float32MultiArray, queue_size=10)
         self.pub_radec_mount  = rospy.Publisher('/mount/status/coordinates/RaDec_mount', Float32MultiArray, queue_size=10) # souradnice, ktere nemaji chybu offsetu
@@ -153,8 +155,11 @@ class mount(AromNode):
 
         self.mount_steps = self.mount.getStepsPerRev()
 
-        self.pub_trackingmodes = rospy.Publisher('/mount/modes', arom_telescope.msg.mount_tracking_modes, latch=True, queue_size = 5)
+
         modes = self.mount.getTrackingModes()
+        '''
+        #TODO: odeslat vsechny mozne parametry hodinoveho stroje....
+        self.pub_trackingmodes = rospy.Publisher('/mount/modes', arom_telescope.msg.mount_tracking_modes, latch=True, queue_size = 5)
         print(modes)
         self.pub_trackingmodes.publish()
         data = arom_telescope.msg.mount_tracking_modes()
@@ -167,9 +172,9 @@ class mount(AromNode):
             data.mode[i].dec = modes[mode]['dec']
         print(data)
         self.pub_trackingmodes.publish(data)
+        '''
 
-        (trackSpd_ra, trackSpd_dec) = self.mount.getDefaultTrackingSpd()
-        print (trackSpd_ra, trackSpd_dec)
+        trackSpd_ra, trackSpd_dec = 0,0
 
         print(" zinicializovano ")
 
@@ -234,9 +239,9 @@ class mount(AromNode):
                         self.mount.tracking(True, tracking_mode='sidereal')
                         
                     elif lastBtn in ['stopTracking', 'STOP1']:
-                        trackSpd_ra, trackSpd_dec = 1.7, 0
-                        self.mount.setTrackingSpeed(ra = trackSpd_ra, dec = trackSpd_dec)
-                        self.mount.tracking(True)
+                        trackSpd_dec = 1
+                        trackSpd_ra = 1
+                        self.mount.set_tracking(mode = 'sidereal')
                         
                     elif lastBtn == 'home' or lastBtn == 'KEY_STOP':
                         self.mount.GoPark()
@@ -245,32 +250,22 @@ class mount(AromNode):
                         self.mount.Slew(SkyCoord(ra = float(split[1]), dec = float(split[2]), frame = 'icrs', unit="deg"))
 
                     elif lastBtn in ['KEY_UP', 'DEC_P1']:
-                        trackSpd_dec += 10
-                        self.mount.setTrackingSpeed(ra = float(trackSpd_ra), dec = float(trackSpd_dec))
-                        self.mount.tracking(True)
-                        #dec += 10
-                        #self.mount.Slew(SkyCoord(ra = ra, dec=dec, unit="deg"))
+                        trackSpd_dec += 100
+                        self.mount.set_tracking(mode = 'sidereal', ra_multiplication = trackSpd_ra, dec_multiplication = trackSpd_dec)
 
                     elif lastBtn in ['KEY_DOWN', 'DEC_M1']:
-                        trackSpd_dec -= 10
-                        self.mount.setTrackingSpeed(ra = float(trackSpd_ra), dec = float(trackSpd_dec))
-                        self.mount.tracking(True)
-                        #dec -= 10
-                        #self.mount.Slew(SkyCoord(ra = ra, dec=dec, unit="deg"))
+                        trackSpd_dec -= 100
+                        self.mount.set_tracking(mode = 'sidereal', ra_multiplication = trackSpd_ra, dec_multiplication = trackSpd_dec)
 
                     elif lastBtn in ['KEY_LEFT', 'RA_P1']:
-                        trackSpd_ra += 10
-                        self.mount.setTrackingSpeed(ra = float(trackSpd_ra), dec = float(trackSpd_dec))
-                        self.mount.tracking(True)
-                        #ra += 10
-                        #self.mount.Slew(SkyCoord(ra = ra, dec=dec, unit="deg"))
+                        trackSpd_ra += 100
+                        self.mount.set_tracking(mode = 'sidereal', ra_multiplication = trackSpd_ra, dec_multiplication = trackSpd_dec)
+
 
                     elif lastBtn in ['KEY_RIGHT', 'RA_M1']:
-                        trackSpd_ra -= 10
-                        self.mount.setTrackingSpeed(ra = float(trackSpd_ra), dec = float(trackSpd_dec))
-                        self.mount.tracking(True)
-                        #ra -= 10
-                        #self.mount.Slew(SkyCoord(ra = ra, dec=dec, unit="deg"))
+                        trackSpd_ra -= 100
+                        self.mount.set_tracking(mode = 'sidereal', ra_multiplication = trackSpd_ra, dec_multiplication = trackSpd_dec)
+
 
                     elif lastBtn == 'KEY_MENU':
                         pass
@@ -282,6 +277,7 @@ class mount(AromNode):
 
                     elif lastBtn == 'KEY_PLAY' or lastBtn == "unpark":
                         self.mount.UnPark()
+
                 else:
                     #print "Something else ....."
                     #(ra, dec) = self.mount.getCoordinates('RaDec')
@@ -336,7 +332,21 @@ class mount(AromNode):
             self.pub_radec_mount.publish(mat)
         except Exception, e:
             print "Err-send", e
-            
+
+    def get_tracking(self, msg):
+        print(msg)
+        mode = msg.mode
+        if not mode in ['sidereal', 'solar', 'lunar', 'custom']:
+            return "Not supported command"
+        
+        if mode == 'custom':
+            units = mode.units
+            ra = mode.ra
+            dec = mode.dec
+            return self.mount.set_tracking(mode=mode, units=units, ra=ra, dec=dec)
+        else:
+            return self.mount.set_tracking(mode=mode)
+        
 
     def mount_status_callback(self, coord, coord_mount, motor_a = False, motor_b = False):
         try:

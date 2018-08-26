@@ -17,6 +17,7 @@ add_message_files(
    FILES
    mount_tracking_mode.msg
    mount_tracking_modes.msg
+   time_machine.msg
 #   Message1.msg
 #   Message2.msg
 )
